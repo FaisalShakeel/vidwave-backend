@@ -1,6 +1,8 @@
+const UserModel = require('../Models/UserModel')
 const VideoModel=require('../Models/VideoModel')
 exports.getAllVideos=async (req, res) => {
     console.log("Getting All Videos")
+    
     try{
         let videos=await VideoModel.find()
         res.json({success:true,videos})
@@ -11,42 +13,62 @@ exports.getAllVideos=async (req, res) => {
    
 
 }
-exports.getVideo=async (req, res) => {
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let alreadyViewed = false
-    let _UID = new ObjectId(req.params.UID)
-    try {
-        let _ID = new ObjectId(req.params.ID)
-        let video = await dB.collection("videos").findOne({ _id: _ID })
-        let viewedBy = video.viewedBy
-        console.log(viewedBy)
-        console.log(video)
-        if (viewedBy.length == 0) {
-            let user = await dB.collection("users").findOne({ _id: _UID })
-            let _viewedBy = viewedBy.concat({ name: user.name, ID: user._id, EMailAddress: user.EMailAddress })
-            dB.collection("videos").updateOne({ _id: _ID }, { $set: { viewedBy: _viewedBy } })
-        }
-        else {
-            for (let viewer of viewedBy) {
-                if (viewer.ID == req.params.UID) {
-                    alreadyViewed = true
-                }
-            }
-            if (alreadyViewed == false) {
-                let user = await dB.collection("users").findOne({ _id: _UID })
-                let _viewedBy = viewedBy.concat({ name: user.name, ID: user._id, EMailAddress: user.EMailAddress })
-                dB.collection("videos").updateOne({ _id: _ID }, { $set: { viewedBy: _viewedBy } })
-            }
-        }
+const jwt = require("jsonwebtoken");
 
-        res.json({ success: true, video })
-    }
-    catch (error) {
-        res.json({ success: false })
+exports.getVideo = async (req, res) => {
+  console.log("Getting Single Video", req.query.token);
+
+  try {
+    // Fetch the video by ID
+    const video = await VideoModel.findById(req.params.videoId);
+
+    if (!video) {
+      return res.status(404).json({ success: false, message: "Video not found!" });
     }
 
-}
+    // Fetch the uploader details
+    const uploadedBy = await UserModel.findById(video.uploadedBy);
+    if (!uploadedBy) {
+      return res.status(404).json({ success: false, message: "Uploader not found!" });
+    }
+
+    // Handle token validation and decoding
+    if (req.query.token) {
+      try {
+        const decoded = jwt.verify(req.query.token, process.env.JWT_SECRET_KEY);
+        req.user = decoded; // Attach decoded user to the request object
+
+        // Update the viewedBy array if the user is valid
+        if (!video.viewedBy.includes(req.user.id)) {
+          video.viewedBy.push(req.user.id);
+          await video.save();
+        }
+      } catch (tokenError) {
+        console.error("Invalid or expired token:", tokenError.message);
+        return res.status(403).json({ success: false, message: "Invalid or expired token" });
+      }
+    }
+
+    // Fetch relevant videos (example logic: videos uploaded by the same user or similar category)
+    const relevantVideos = await VideoModel.find({
+      _id: { $ne: video._id }, // Exclude the current video
+      category: video.category, // Match videos in the same category
+    }).limit(5); // Limit the number of relevant videos
+
+    // Send the response
+    res.status(200).json({
+      success: true,
+      video,
+      uploadedBy,
+      relevantVideos,
+    });
+  } catch (error) {
+    console.error("Error fetching video:", error.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+  
 exports.getLikedVideos=async (req, res) => {
     let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
     let dB = mongoClient.db("YouTube")
@@ -132,11 +154,16 @@ exports.getWatchedVideos=async (req, res) => {
     }
 }
 exports.addVideo=async (req, res) => {
-   console.log("Req Body",req.body)  
+   console.log("Req Body",req.user)
+   if(req.user)
+    {
+
+    
     try {
         req.body.uploadedByName=req.user.name
         req.body.uploadedByProfilePhotoUrl=req.user.profilePhotoUrl
         req.body.uploadedBy=req.user.id
+        console.log("Uploaded By Photo",req.body.uploadedByProfilePhotoUrl)
 
         const video=new VideoModel(req.body)
        await  video.save()
@@ -145,6 +172,10 @@ exports.addVideo=async (req, res) => {
     catch (error) {
         return res.json({ success: false,message:error.message})
     }
+}
+else{
+    res.json({success:false,message:"Unathorized User!"})
+}
 
 }
 exports.likeVideo=async (req, res) => {

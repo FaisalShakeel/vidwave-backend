@@ -3,7 +3,7 @@ const { getLikedVideos, getVideo, getSavedVideos, getWatchedVideos, addVideo, li
 const verifyUser = require('../Middlewares/VerifyUser')
 const videoRouter=express.Router()
 videoRouter.get("/get-allvideos",getAllVideos )
-videoRouter.get("/getvideo/:ID/:UID",getVideo )
+videoRouter.get("/getvideo/:videoId",getVideo )
 videoRouter.get("/getlikedvideos/:UID", getLikedVideos)
 videoRouter.get("/getsavedvideos/:UID",getSavedVideos )
 videoRouter.get("/getwatchedvideos/:UID",getWatchedVideos )
