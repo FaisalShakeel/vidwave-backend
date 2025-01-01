@@ -1,10 +1,11 @@
 const express=require('express')
 const { createAccount, updatedUser, login, getProfile, getUser, follow } = require('../Controllers/UserController')
+const verifyUser = require('../Middlewares/VerifyUser')
 let userRouter=express.Router()
 userRouter.post("/createaccount",createAccount)
 userRouter.post("/updateuser/:UID",updatedUser )
 userRouter.post("/login",login )
 userRouter.get("/getprofile/:UID",getProfile )
 userRouter.get("/getuser/:UID",getUser )
-userRouter.post("/follow/:UID/:userToFollowID",follow )
+userRouter.post("/follow",verifyUser,follow )
 module.exports=userRouter

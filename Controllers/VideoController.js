@@ -178,83 +178,162 @@ else{
 }
 
 }
-exports.likeVideo=async (req, res) => {
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let alreadyLiked = false
-    let _UID = new ObjectId(req.params.UID)
+
+
+exports.likeVideo = async (req, res) => {
+  try {
+    const userId = req.user.id; // ID of the person liking the video
+    const { videoId } = req.body; // ID of the video being liked
+
+    // Find the video by ID
+    const video = await VideoModel.findById(videoId);
+
+    if (!video) {
+      return res.status(404).json({ message: "Video not found" });
+    }
+
+    // Check if the user has already liked the video
+    const userHasLiked = video.likedBy.includes(userId);
+
+    if (userHasLiked) {
+      // If already liked, remove the user from the likedBy list
+      video.likedBy = video.likedBy.filter(id => id.toString() !== userId.toString());
+      await video.save();
+      return res.status(200).json({success:true, message: "You have unliked the video", likedBy: video.likedBy });
+    } else {
+      // If not liked, add the user to the likedBy list
+      video.likedBy.push(userId);
+      await video.save();
+      return res.status(200).json({success:true, message: "You have liked the video", likedBy: video.likedBy });
+    }
+  } catch (error) {
+    console.error("Error liking/unliking video:", error);
+    return res.status(500).json({ message: "An error occurred", error: error.message });
+  }
+};
+
+
+exports.addComment = async (req, res) => {
     try {
-        let _ID = new ObjectId(req.params.ID)
-        let video = await dB.collection("videos").findOne({ _id: _ID })
-        let likedBy = video.likedBy
-        console.log(likedBy)
-        console.log(video)
-        if (likedBy.length == 0) {
-            let user = await dB.collection("users").findOne({ _id: _UID })
-            //({title:"Added A New Video",videoThumbnailUrl:req.body.thumbnailUrl,sentBy:req.params.UID, sentTo:follower.ID, videoID:video._id,userName:user.name,userProfilePhotoUrl:user.profilePhotoUrl})
-            if(req.params.UID!=video.createdBy)
-            {
-            await dB.collection("notifications").insertOne({ title: "Liked Your Video", videoThumbnailUrl: video.thumbnailUrl, sentBy: req.params.UID, sentTo: video.createdBy, videoID: video._id, userName: user.name, userProfilePhotoUrl: user.profilePhotoUrl, addedOn: new Date().toLocaleDateString().split("T")[0], Type: "Liked" })
-            }
+    
+        // Destructure the required data from request
+        const { videoId, comment } = req.body;
+        const { id: userId, name, profilePhotoUrl } = req.user;
 
-            let _likedBy = likedBy.concat({ name: user.name, ID: user._id, EMailAddress: user.EMailAddress })
-            await dB.collection("videos").updateOne({ _id: _ID }, { $set: { likedBy: _likedBy } })
+        // Validate the input
+        if (!videoId || !comment) {
+            return res.status(400).json({
+                success: false,
+                message: "Video ID and comment text are required.",
+            });
         }
-        else {
-            for (let viewer of likedBy) {
-                if (viewer.ID == req.params.UID) {
-                    alreadyLiked = true
-                }
-            }
-            if (alreadyLiked == false) {
-                let user = await dB.collection("users").findOne({ _id: _UID })
-                if(req.params.UID!=video.createdBy)
-                {
-                await dB.collection("notifications").insertOne({ title: "Liked Your Video", videoThumbnailUrl: video.thumbnailUrl, sentBy: req.params.UID, sentTo: video.createdBy, videoID: video._id, userName: user.name, userProfilePhotoUrl: user.profilePhotoUrl, addedOn: new Date().toLocaleDateString().split("T")[0], Type: "Liked" })
 
+        // Fetch the video from the database
+        const video = await VideoModel.findById(videoId);
 
-                }
-                let _likedBy = likedBy.concat({ name: user.name, ID: user._id, EMailAddress: user.EMailAddress })
-                dB.collection("videos").updateOne({ _id: _ID }, { $set: { likedBy: _likedBy } })
-            }
-            else {
-                let user = await dB.collection("users").findOne({ _id: _UID })
-                let _likedBy = likedBy.filter((viewer) => {
-                    return (viewer.ID != req.params.UID)
-                })
-
-                await dB.collection("videos").updateOne({ _id: _ID }, { $set: { likedBy: _likedBy } })
-            }
+        // If video is not found
+        if (!video) {
+            return res.status(404).json({
+                success: false,
+                message: "Video not found.",
+            });
         }
-        res.json({ success: true, video })
+
+        // Create a new comment object
+        const newComment = {
+            _id:Math.random(),
+            userId,
+            name,
+            profilePhotoUrl,
+            text: comment,
+            date: new Date(),
+            replies:[]
+        };
+
+        // Add the comment to the video's comments array
+        video.comments.push(newComment);
+
+        // Save the updated video
+        await video.save();
+
+        // Respond with success
+        return res.status(200).json({
+            success: true,
+            message: "Comment added successfully.",
+            video, // Optionally return the updated comments
+        });
+    } catch (e) {
+        // Handle any errors
+        console.error("Error adding comment:", e);
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred while adding the comment.",
+        });
     }
-    catch (error) {
-        res.json({ success: false })
+};
+exports.replyToComment = async (req, res) => {
+  console.log("Replying To Comment", req.body);
+  try {
+    const { videoId, commentId, replyText } = req.body;
+
+    if (!videoId || typeof commentId === "undefined" || !replyText) {
+      return res
+        .status(400)
+        .json({ success: false, message: "All fields are required." });
     }
 
-}
-exports.addComment=async (req, res) => {
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let _ID = new ObjectId(req.params.ID)
-    let _UID = new ObjectId(req.params.UID)
-    let currentDate = new Date().toLocaleDateString().split("T")[0]
-    try {
-        let video = await dB.collection("videos").findOne({ _id: _ID })
-        let comments = video.comments
-        let user = await dB.collection("users").findOne({ _id: _UID })
-        if(req.params.UID!=video.createdBy)
-        {
-        await dB.collection("notifications").insertOne({ title: "Commented Your Video", videoThumbnailUrl: video.thumbnailUrl, videoID: video._id, sentTo: video.createdBy, sentBy: req.params.UID, userName: user.name, userProfilePhotoUrl: user.profilePhotoUrl, addedOn: new Date().toLocaleDateString().split("T")[0], Type: "Commented" })
-        }
-        let _comments = comments.concat({ userName: user.name, userProfilePhotoUrl: user.profilePhotoUrl, UID: user._id, text: req.body.text, addedOn: currentDate ,ID:Math.random().toString()})
-        await dB.collection("videos").updateOne({ _id: _ID }, { $set: { comments: _comments } })
-        res.json({ success: true })
+    // Find the video by ID
+    const video = await VideoModel.findById(videoId);
+
+    if (!video) {
+      return res.status(404).json({ success: false, message: "Video not found." });
     }
-    catch (error) {
-        res.json({ success: false })
+     let comment = video.comments.find((c) => c._id.toString() === commentId.toString());
+
+    if (!comment) {
+      return res.status(404).json({ success: false, message: "Comment not found." });
     }
-}
+
+
+    // Find the comment index by commentId
+    const commentIndex = video.comments.findIndex((c) => c._id.toString() === commentId.toString());
+    console.log("Comment Index",commentIndex)
+
+    
+
+    // Create a reply object
+    const newReply = {
+      _id: Math.random(), // Unique ID for the reply
+      text: replyText,
+      name: req.user.name,
+      profilePhotoUrl: req.user.profilePhotoUrl,
+      date: new Date(),
+    };
+    console.log("Comment Replies",comment.replies)
+    comment.replies.push(newReply)
+    console.log("Comment Replies After Updating",comment.replies)
+    console.log("Latest Comment",comment)
+    video.comments[commentIndex]=comment
+
+
+    // Save the updated video
+    await video.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Reply added successfully.",
+      video,
+    });
+  } catch (e) {
+    console.error("Error replying to comment:", e);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while replying to the comment.",
+    });
+  }
+};
+
+
 exports.updateVideo=async(req,res)=>{
     let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
     let dB = mongoClient.db("YouTube")

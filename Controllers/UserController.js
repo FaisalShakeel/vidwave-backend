@@ -116,58 +116,50 @@ exports.getUser=async (req, res) => {
         res.json({ success: false })
     }
 }
-exports.follow=async (req, res) => {
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let UID = new ObjectId(req.params.UID)
-    let userToFollowID = new ObjectId(req.params.userToFollowID)
-    let alreadyFollowing = false
+
+
+exports.follow = async (req, res) => {
+    console.log("Follow API ")
+    const  userId  = req.user.id; // Assuming authenticated user ID is available in req.user
+    const { followingId } = req.body; // ID of the user to follow/unfollow
+
+    if (!followingId) {
+        return res.status(400).json({ success: false, message: "User ID to follow is required" });
+    }
+
     try {
-        let user = await dB.collection("users").findOne({ _id: UID })
-        let userToFollow = await dB.collection("users").findOne({ _id: userToFollowID })
-        console.log(user)
-        console.log(userToFollow)
-        let followings = user.followings
-        let followers = userToFollow.followers
-        if (followings.length == 0) {
+        // Fetch both users from the database
+        const user = await UserModel.findById(userId);
+        const userToFollow = await UserModel.findById(followingId);
 
-            let _followings = followings.concat({ name: userToFollow.name, EMailAddress: userToFollow.EMailAddress, ID: req.params.userToFollowID, bio: userToFollow.bio, profilePhotoUrl: userToFollow.profilePhotoUrl })
-            await dB.collection("users").updateOne({ _id: UID }, { $set: { followings: _followings } })
-            //({title:"Added A New Video",videoThumbnailUrl:req.body.thumbnailUrl,sentBy:req.params.UID, sentTo:follower.ID, videoID:video._id,userName:user.name,userProfilePhotoUrl:user.profilePhotoUrl})
-
-            await dB.collection("notifications").insertOne({ title: "Started Following You", sentTo: userToFollow._id, sentBy: user._id, userName: user.name, userProfilePhotoUrl: user.profilePhotoUrl, addedOn: new Date().toLocaleDateString().split("T")[0], Type: "Followed" })
-            let _followers = followers.concat({ name: user.name, EMailAddress: user.EMailAddress, ID: req.params.UID, bio: user.bio, profilePhotoUrl: user.profilePhotoUrl })
-            await dB.collection("users").updateOne({ _id: userToFollowID }, { $set: { followers: _followers } })
+        if (!user || !userToFollow) {
+            return res.status(404).json({ success: false, message: "User not found" });
         }
-        else {
-            for (let follower of followers) {
-                if (follower.ID == req.params.UID) {
-                    alreadyFollowing = true
-                }
 
-            }
-            if (alreadyFollowing) {
-                let _followings = followings.filter((viewer) => {
-                    return (viewer.ID != req.params.userToFollowID)
-                })
-                await dB.collection("users").updateOne({ _id: UID }, { $set: { followings: _followings } })
-                let _followers = followers.filter((viewer) => { return viewer.ID != req.params.UID })
-                await dB.collection("notifications").insertOne({ title: "Has Unfollowed You", sentTo: userToFollow._id, sentBy: user._id, userName: user.name, userProfilePhotoUrl: user.profilePhotoUrl, addedOn: new Date().toLocaleDateString().split("T")[0], Type: "Unfollowed" })
-                await dB.collection("users").updateOne({ _id: userToFollowID }, { $set: { followers: _followers } })
-            }
-            else {
-                let _followings = followings.concat({ name: userToFollow.name, EMailAddress: userToFollow.EMailAddress, ID: req.params.userToFollowID, bio: userToFollow.bio, profilePhotoUrl: userToFollow.profilePhotoUrl })
-                await dB.collection("users").updateOne({ _id: UID }, { $set: { followings: _followings } })
-                await dB.collection("notifications").insertOne({ title: "Started Following You", sentTo: userToFollow._id, sentBy: user._id, userName: user.name, userProfilePhotoUrl: user.profilePhotoUrl, addedOn: new Date().toLocaleDateString().split("T")[0], Type: "Followed" })
-                let _followers = followers.concat({ name: user.name, EMailAddress: user.EMailAddress, ID: req.params.UID, bio: user.bio, profilePhotoUrl: user.profilePhotoUrl })
-                await dB.collection("users").updateOne({ _id: userToFollowID }, { $set: { followers: _followers } })
-            }
+        // Check if the user is already following
+        const isFollowing = user.followings.includes(followingId);
 
+        if (isFollowing) {
+            // Remove the following relationship
+            user.followings = user.followings.filter(id => id.toString() !== followingId);
+            userToFollow.followers = userToFollow.followers.filter(id => id.toString() !== userId);
+
+            await user.save();
+            await userToFollow.save();
+
+            return res.status(200).json({ success: true, message: "Unfollowed the user successfully" });
+        } else {
+            // Add the following relationship
+            user.followings.push(followingId);
+            userToFollow.followers.push(userId);
+
+            await user.save();
+            await userToFollow.save();
+
+            return res.status(200).json({ success: true, message: "Followed the user successfully" });
         }
-        res.json({ success: true })
+    } catch (error) {
+        console.error("Error in follow operation:", error);
+        return res.status(500).json({ success: false, message: "An error occurred", error: error.message });
     }
-    catch (error) {
-        res.json({ success: false })
-
-    }
-}
+};
