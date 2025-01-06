@@ -1,4 +1,6 @@
 const UserModel=require('../Models/UserModel')
+const PlaylistModel=require('../Models/PlaylistModel')
+const VideoModel=require('../Models/VideoModel')
 const jwt=require('jsonwebtoken')
 const JWT_EXPIRES_IN='30d'
 
@@ -64,7 +66,7 @@ exports.login=async (req, res)=>{
        if(user.EMailAddress==req.body.EMailAddress&&user.passWord==req.body.passWord)
        {
         console.log("User Logged In")
-        const token=jwt.sign({EMailAddress:req.body.EMailAddress,name:user.name,id:user._id,profilePhotoUrl:req.body.profilePhotoUrl},process.env.JWT_SECRET_KEY,{expiresIn:JWT_EXPIRES_IN})
+        const token=jwt.sign({EMailAddress:req.body.EMailAddress,name:user.name,id:user._id,profilePhotoUrl:user.profilePhotoUrl},process.env.JWT_SECRET_KEY,{expiresIn:JWT_EXPIRES_IN})
        res.json({success:true,token})
        }
        else
@@ -84,26 +86,53 @@ exports.login=async (req, res)=>{
 
 }
 }
-exports.getProfile=async (req, res) => {
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let UID = new ObjectId(req.params.UID)
-    try {
-        let videos = []
-        let user = await dB.collection("users").findOne({ _id: UID })
-        console.log(user)
-        videos = await dB.collection("videos").find().toArray()
-        let _videos = videos.filter((video) => {
-            return (video.createdBy == req.params.UID)
-        })
-        res.json({ success: true, user, videos: _videos, totalVideos: _videos.length })
-    }
-    catch (error) {
-        res.json({ success: false })
+const mongoose = require("mongoose"); // Assuming Mongoose is being used
 
+exports.getProfile = async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    // Validate the userId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID.",
+      });
     }
 
-}
+    // Fetch user data
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    // Fetch playlists created by the user
+    const playlists = await PlaylistModel.find({ createdBy: userId });
+
+    // Fetch videos created by the user
+    const videos = await VideoModel.find({ uploadedBy: userId });
+
+    // Send success response with user data, playlists, and videos
+    return res.status(200).json({
+      success: true,
+      message: "Profile fetched successfully.",
+        user,
+        playlists,
+        videos,
+      
+    });
+  } catch (error) {
+    console.error("Error fetching profile:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while fetching the profile.",
+    });
+  }
+};
+
 exports.getUser=async (req, res) => {
     await mongoose.connect("mongodb://127.0.0.1:27017/YouTube")
     const User = mongoose.model("users", UserSchema)

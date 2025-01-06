@@ -5,7 +5,7 @@ let userRouter=express.Router()
 userRouter.post("/createaccount",createAccount)
 userRouter.post("/updateuser/:UID",updatedUser )
 userRouter.post("/login",login )
-userRouter.get("/getprofile/:UID",getProfile )
+userRouter.get("/getprofile/:id",getProfile )
 userRouter.get("/getuser/:UID",getUser )
 userRouter.post("/follow",verifyUser,follow )
 module.exports=userRouter

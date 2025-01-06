@@ -1,5 +1,14 @@
 const UserModel = require('../Models/UserModel')
 const VideoModel=require('../Models/VideoModel')
+const getSortCriteria = (type) => {
+  switch (type) {
+    case 'high': return -1; // Descending
+    case 'low': return 1; // Ascending
+    case 'low to high': return 1;
+    case 'high to low': return -1;
+    default: return null;
+  }
+};
 exports.getAllVideos=async (req, res) => {
     console.log("Getting All Videos")
     
@@ -330,6 +339,138 @@ exports.replyToComment = async (req, res) => {
       success: false,
       message: "An error occurred while replying to the comment.",
     });
+  }
+};
+exports.getSearchResults = async (req, res) => {
+  console.log("Search Query", req.body);
+  
+  try {
+    const { query = "", filters = {}, tab = 0, page = 1, limit = 5 } = req.body;
+    const skip = (page - 1) * limit;
+    let results = [];
+    let totalCount = 0;
+
+    if (tab === 0) {
+      console.log("Getting Results For Video");
+
+      // Video Search - Create base search query
+      const searchQuery = query 
+        ? { title: { $regex: query, $options: "i" } }
+        : {};
+      
+      // Build filter criteria
+      const filterCriteria = {};
+      if (filters.date) {
+        const now = new Date();
+        if (filters.date === "24 hours") {
+          filterCriteria.createdAt = { $gte: new Date(now - 24 * 60 * 60 * 1000) };
+        } else if (filters.date === "7 days") {
+          filterCriteria.createdAt = { $gte: new Date(now - 7 * 24 * 60 * 60 * 1000) };
+        } else if (filters.date === "30 days") {
+          filterCriteria.createdAt = { $gte: new Date(now - 30 * 24 * 60 * 60 * 1000) };
+        } else if (filters.date === "all time") {
+          // No filter for createdAt to include all documents
+          delete filterCriteria.createdAt;
+        }
+      }
+      
+      // Combine search query and filters
+      const matchStage = {
+        $match: {
+          ...searchQuery,
+          ...filterCriteria,
+        },
+      };
+      
+      // Sorting criteria
+      const sortCriteria = {};
+      if (filters.views) sortCriteria.viewsCount = getSortCriteria(filters.views); // Sort by views first
+      if (filters.likes) sortCriteria.likesCount = getSortCriteria(filters.likes); // Then by likes
+      
+      // Default sort if no specific criteria
+      if (Object.keys(sortCriteria).length === 0) {
+        sortCriteria.createdAt = -1; // Default to descending creation date
+      }
+      
+      console.log("Match Stage:", matchStage);
+      console.log("Sort Criteria:", sortCriteria);
+      
+      try {
+        // First get total count with matching criteria
+        totalCount = await VideoModel.countDocuments({
+          ...searchQuery,
+          ...filterCriteria,
+        });
+      
+        // Then perform aggregation with all stages
+        results = await VideoModel.aggregate([
+          matchStage, // Apply search and filters first
+          {
+            $addFields: {
+              likesCount: { $size: "$likedBy" },
+              viewsCount: { $size: "$viewedBy" },
+            },
+          },
+          {
+            $sort: sortCriteria, // Apply sorting by views and likes
+          },
+          { $skip: skip },
+          { $limit: limit },
+        ]);
+      
+      } catch (error) {
+        console.error("Error in fetching video results:", error);
+        throw error;
+      }
+      
+    } else if (tab === 1) {
+      // People Search
+const searchQuery = query ? { name: { $regex: query.trim(), $options: "i" } } : {};
+console.log("Search Query:", searchQuery);
+
+// Sorting criteria
+const sortCriteria = {};
+if (filters.subscribers) {
+  sortCriteria.followersCount = getSortCriteria(filters.subscribers); // 1 for ascending, -1 for descending
+}
+console.log("Sort Criteria:", sortCriteria);
+
+  // Get total count
+  totalCount = await UserModel.countDocuments(searchQuery);
+
+  // Perform aggregation for people search
+  results = await UserModel.aggregate([
+    { $match: searchQuery }, // Match users based on search query
+    {
+      $addFields: {
+        followersCount: { $size: "$followers" }, // Add a calculated field for followers count
+      },
+    },
+    {
+      $sort: Object.keys(sortCriteria).length > 0
+        ? sortCriteria // Use the provided sorting criteria
+        : { followersCount: -1 }, // Default to descending by followers count
+    },
+    { $skip: skip }, // Pagination: skip records
+    { $limit: limit }, // Pagination: limit records
+  ]);
+
+  
+
+
+    }
+
+   
+
+    res.status(200).json({
+      results,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+    });
+
+  } catch (error) {
+    console.error("Error in /search:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
