@@ -192,3 +192,138 @@ exports.follow = async (req, res) => {
         return res.status(500).json({ success: false, message: "An error occurred", error: error.message });
     }
 };
+const getAnalytics = async (req, res) => {
+    try {
+      const userId = req.user.id;
+  
+      // Fetch all videos uploaded by the user
+      const userVideos = await VideoModel.find({ uploadedBy: userId });
+  
+      // Calculate total views by summing up the lengths of viewedBy arrays
+      const totalViews = userVideos.reduce((acc, video) => acc + video.viewedBy.length, 0);
+  
+      // Get the total number of videos
+      const totalVideos = userVideos.length;
+  
+      // Find the most liked video
+      const mostLikedVideo = userVideos.reduce((mostLiked, video) => {
+        return video.likedBy.length > (mostLiked.likedBy?.length || 0) ? video : mostLiked;
+      }, {});
+  
+      // Prepare data for "Most Watched Categories"
+      const categoryViews = {};
+      userVideos.forEach((video) => {
+        categoryViews[video.category] = (categoryViews[video.category] || 0) + video.viewedBy.length;
+      });
+  
+      const mostWatchedCategories = {
+        labels: Object.keys(categoryViews),
+        data: Object.values(categoryViews),
+      };
+  
+      // Prepare "Recent Comments" (most recent 3 comments by date)
+      const recentComments = userVideos
+        .flatMap((video) =>
+          video.comments.map((comment) => ({
+            user: comment.userName,
+            comment: comment.text,
+            date: new Date(comment.date),
+          }))
+        )
+        .sort((a, b) => b.date - a.date)
+        .slice(0, 3)
+        .map(({ user, comment }) => ({ user, comment }));
+  
+      // Prepare data for "Views Over Time" (monthly views)
+      const viewsByMonth = {};
+      userVideos.forEach((video) => {
+        video.viewedBy.forEach((view) => {
+          const month = new Date(view.date).toLocaleString("default", { month: "short" });
+          viewsByMonth[month] = (viewsByMonth[month] || 0) + 1;
+        });
+      });
+  
+      const viewsOverTime = {
+        labels: Object.keys(viewsByMonth),
+        data: Object.values(viewsByMonth),
+      };
+  
+      // Send response
+      res.status(200).json({
+        success: true,
+        message: "Analytics data fetched successfully",
+        data: {
+          totalViews,
+          totalVideos,
+          mostLikedVideo: {
+            title: mostLikedVideo.title || "No videos yet",
+            likes: mostLikedVideo.likedBy?.length || 0,
+          },
+          viewsOverTime,
+          mostWatchedCategories,
+          recentComments,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching analytics data:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error fetching analytics data",
+      });
+    }
+  };
+  exports.getDashboardStatistics = async (req, res) => {
+    try {
+      const userId = req.user.id;
+  
+      // Fetch user data
+      const user = await UserModel.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+  
+      // Fetch videos uploaded by the user
+      const videos = await VideoModel.find({ uploadedBy: userId });
+  
+      // Calculate total views from all videos
+      const totalViews = videos.reduce((acc, video) => acc + video.viewedBy.length, 0);
+  
+      // Get recent uploads (uploaded in the last 7 days)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const recentUploads = videos.filter((video) => new Date(video.createdAt) > sevenDaysAgo);
+  
+      // Prepare statistics
+      const statistics = {
+        generalStats: [
+          { title: "Total Subscribers", value: user.followers.length },
+          { title: "Total Views", value: totalViews },
+          { title: "Total Videos", value: videos.length },
+        ],
+        recentUploads: recentUploads.map((video) => ({
+          id: video._id,
+          title: video.title,
+          createdAt: video.createdAt,
+          views: video.viewedBy.length,
+        })),
+      };
+      
+  
+      // Return response
+      res.status(200).json({
+        success: true,
+        message: "Dashboard statistics retrieved successfully",
+    statistics,
+      });
+    } catch (error) {
+      console.error("Error fetching dashboard statistics:", error);
+      res.status(500).json({
+        success: false,
+        message: "An error occurred while fetching dashboard statistics",
+        error: error.message,
+      });
+    }
+  };
