@@ -1,3 +1,4 @@
+const { default: mongoose } = require('mongoose');
 const UserModel = require('../Models/UserModel')
 const VideoModel=require('../Models/VideoModel')
 const getSortCriteria = (type) => {
@@ -27,6 +28,7 @@ const jwt = require("jsonwebtoken");
 exports.getVideo = async (req, res) => {
   console.log("Getting Single Video", req.query.token);
 
+
   try {
     // Fetch the video by ID
     const video = await VideoModel.findById(req.params.videoId);
@@ -48,10 +50,14 @@ exports.getVideo = async (req, res) => {
         req.user = decoded; // Attach decoded user to the request object
 
         // Update the viewedBy array if the user is valid
-        if (!video.viewedBy.includes(req.user.id)) {
-          video.viewedBy.push(req.user.id);
+        if (!video.viewedBy.some(view => view.id === req.user.id)) {
+          video.viewedBy.push({
+            id: req.user.id, // Add the user ID
+            viewedAt: new Date(), // Add the current date and time
+          });
           await video.save();
         }
+        
       } catch (tokenError) {
         console.error("Invalid or expired token:", tokenError.message);
         return res.status(403).json({ success: false, message: "Invalid or expired token" });

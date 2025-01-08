@@ -1,5 +1,5 @@
 const express=require('express')
-const { createAccount, updatedUser, login, getProfile, getUser, follow, getDashboardStatistics } = require('../Controllers/UserController')
+const { createAccount, updatedUser, login, getProfile, getUser, follow, getDashboardStatistics, getAnalytics } = require('../Controllers/UserController')
 const verifyUser = require('../Middlewares/VerifyUser')
 let userRouter=express.Router()
 userRouter.post("/createaccount",createAccount)
@@ -9,4 +9,5 @@ userRouter.get("/getprofile/:id",getProfile )
 userRouter.get("/getuser/:UID",getUser )
 userRouter.post("/follow",verifyUser,follow )
 userRouter.get("/get-dashboardstatistics",verifyUser,getDashboardStatistics)
+userRouter.get("/get-analytics",verifyUser,getAnalytics)
 module.exports=userRouter

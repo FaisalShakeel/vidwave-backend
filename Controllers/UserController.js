@@ -192,7 +192,7 @@ exports.follow = async (req, res) => {
         return res.status(500).json({ success: false, message: "An error occurred", error: error.message });
     }
 };
-const getAnalytics = async (req, res) => {
+exports.getAnalytics = async (req, res) => {
     try {
       const userId = req.user.id;
   
@@ -210,37 +210,28 @@ const getAnalytics = async (req, res) => {
         return video.likedBy.length > (mostLiked.likedBy?.length || 0) ? video : mostLiked;
       }, {});
   
-      // Prepare data for "Most Watched Categories"
-      const categoryViews = {};
-      userVideos.forEach((video) => {
-        categoryViews[video.category] = (categoryViews[video.category] || 0) + video.viewedBy.length;
-      });
-  
-      const mostWatchedCategories = {
-        labels: Object.keys(categoryViews),
-        data: Object.values(categoryViews),
-      };
-  
-      // Prepare "Recent Comments" (most recent 3 comments by date)
-      const recentComments = userVideos
-        .flatMap((video) =>
-          video.comments.map((comment) => ({
-            user: comment.userName,
-            comment: comment.text,
-            date: new Date(comment.date),
-          }))
-        )
-        .sort((a, b) => b.date - a.date)
+      // Prepare "Top Performing Videos" (top 3 videos with most views)
+      const topPerformingVideos = userVideos
+        .sort((a, b) => b.viewedBy.length - a.viewedBy.length)
         .slice(0, 3)
-        .map(({ user, comment }) => ({ user, comment }));
+        .map((video) => ({
+          title: video.title,
+          views: video.viewedBy.length,
+          likes: video.likedBy.length,
+        }));
   
       // Prepare data for "Views Over Time" (monthly views)
       const viewsByMonth = {};
       userVideos.forEach((video) => {
-        video.viewedBy.forEach((view) => {
-          const month = new Date(view.date).toLocaleString("default", { month: "short" });
-          viewsByMonth[month] = (viewsByMonth[month] || 0) + 1;
-        });
+        if (Array.isArray(video.viewedBy)) {
+          video.viewedBy.forEach((view) => {
+            if (view?.viewedAt) {
+                console.log("Viewed At",new Date(view.viewedAt))
+              const month = new Date(view.viewedAt).toLocaleString("default", { month: "short" });
+              viewsByMonth[month] = (viewsByMonth[month] || 0) + 1;
+            }
+          });
+        }
       });
   
       const viewsOverTime = {
@@ -248,20 +239,29 @@ const getAnalytics = async (req, res) => {
         data: Object.values(viewsByMonth),
       };
   
+      // Calculate total comments (including replies)
+      const totalComments = userVideos.reduce((acc, video) => {
+        const videoComments = video.comments.reduce(
+          (commentAcc, comment) => commentAcc + 1 + (comment.replies?.length || 0),
+          0
+        );
+        return acc + videoComments;
+      }, 0);
+  
       // Send response
       res.status(200).json({
         success: true,
         message: "Analytics data fetched successfully",
-        data: {
+        analytics: {
           totalViews,
           totalVideos,
+          totalComments,
           mostLikedVideo: {
             title: mostLikedVideo.title || "No videos yet",
             likes: mostLikedVideo.likedBy?.length || 0,
           },
           viewsOverTime,
-          mostWatchedCategories,
-          recentComments,
+          topPerformingVideos,
         },
       });
     } catch (error) {
@@ -272,6 +272,8 @@ const getAnalytics = async (req, res) => {
       });
     }
   };
+  
+  
   exports.getDashboardStatistics = async (req, res) => {
     try {
       const userId = req.user.id;
