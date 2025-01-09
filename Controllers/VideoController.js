@@ -481,21 +481,111 @@ console.log("Sort Criteria:", sortCriteria);
 };
 
 
-exports.updateVideo=async(req,res)=>{
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let _ID = new ObjectId(req.params.ID)
-    try
-    {
-        await dB.collection("videos").updateOne({_id:_ID},{$set:req.body})
-        console.log("Video Updated Successfully!")
-        res.json({success:true})
+exports.getMyVideos = async (req, res) => {
+  console.log("Get My Videos")
+  try {
+    
+    const userId = req.user.id;
+
+    // Fetch all videos uploaded by the user
+    const videos = await VideoModel.find({ uploadedBy: userId });
+
+    res.status(200).json({
+      success: true,
+      message: "Videos fetched successfully.",
+      videos,
+    });
+  } catch (e) {
+    console.error("Error fetching videos:", e);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch videos.",
+    });
+  }
+};
+
+exports.deleteVideo = async (req, res) => {
+  try {
+    console.log("Deleting Video")
+    const userId = req.user.id;
+    const videoId = req.params.videoId;
+
+    // Find the video by its ID
+    const video = await VideoModel.findById(videoId);
+
+    if (!video) {
+      return res.status(404).json({
+        success: false,
+        message: "Video not found.",
+      });
     }
-    catch(e)
-    {
-        res.json({success:false})
+
+    // Check if the user is the uploader of the video
+    if (video.uploadedBy.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to delete this video.",
+      });
     }
-}
+
+    // Delete the video
+   await VideoModel.findByIdAndDelete(videoId)
+
+    res.status(200).json({
+      success: true,
+      message: "Video deleted successfully.",
+    });
+  } catch (e) {
+    console.error("Error deleting video:", e);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete video.",
+    });
+  }
+};
+
+exports.updateVideo = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const videoId = req.body.videoId;
+    const updateData = req.body;
+
+    // Find the video by its ID
+    const video = await VideoModel.findById(videoId);
+
+    if (!video) {
+      return res.status(404).json({
+        success: false,
+        message: "Video not found.",
+      });
+    }
+
+    // Check if the user is the uploader of the video
+    if (video.uploadedBy.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to update this video.",
+      });
+    }
+
+    // Update the video
+    Object.assign(video, updateData); // Merge the update data into the video document
+    await video.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Video updated successfully.",
+      video,
+    });
+  } catch (e) {
+    console.error("Error updating video:", e);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update video.",
+    });
+  }
+};
+
 exports.getVideoDetail=async(req,res)=>{
     let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
     let dB = mongoClient.db("YouTube")
@@ -512,42 +602,7 @@ exports.getVideoDetail=async(req,res)=>{
 
     }
 }
-exports.deleteVideo=async(req,res)=>{
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let _ID  = new ObjectId(req.params.ID)
-    try
-    {
-        await dB.collection("videos").deleteOne({_id:_ID})
-        console.log("Video Deleted")
-        res.json({success:true})
-    }
-    catch(e)
-    {
-        res.json({success:false})
 
-    }
-
-}
-exports.deleteComment=async(req,res)=>{
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-  let _ID=  new ObjectId(req.params.ID)
-    try
-    {
-     let video=   await dB.collection("videos").findOne({_id:_ID})
-     let comments = video.comments
-   let _comments=comments.filter((comment)=>{return (comment.ID!=req.params.commentID)})
-   await dB.collection("videos").updateOne({_id:_ID},{$set:{comments:_comments}})
-   res.json({success:true})
-    }
-    catch(e)
-    {
-        res.json({success:false})
-
-    }
-
-}
 exports.saveVideo=async (req, res) => {
     let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
     let dB = mongoClient.db("YouTube")
