@@ -329,3 +329,112 @@ exports.getAnalytics = async (req, res) => {
       });
     }
   };
+  exports.getProfileBasicInfo = async (req, res) => {
+    try {
+      const user = await UserModel.findById(req.user.id, 'name bio EMailAddress profilePhotoUrl');
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found',
+        });
+      }
+  
+      res.status(200).json({
+        success: true,
+        message: 'Profile fetched successfully',
+         user,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: 'Error fetching profile information',
+        error: error.message,
+      });
+    }
+  };
+  
+  // Update Profile
+  exports.updateProfile = async (req, res) => {
+    const { username, bio, profilePhotoUrl } = req.body;
+  
+    try {
+      const user = await UserModel.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found',
+        });
+      }
+  
+      user.name = username || user.name;
+      user.bio = bio || user.bio;
+      user.profilePhotoUrl = profilePhotoUrl || user.profilePhotoUrl;
+  
+      await user.save();
+      await VideoModel.updateMany({uploadedBy:req.user.id},{uploadedByName:req.body.username,uploadedByProfilePhotoUrl:req.body.profilePhotoUrl})
+  
+      res.status(200).json({
+        success: true,
+        message: 'Profile updated successfully',
+        data: {
+          username: user.username,
+          bio: user.bio,
+          profileImage: user.profileImage,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: 'Error updating profile',
+        error: error.message,
+      });
+    }
+  };
+  
+  // Change Password
+  exports.changePassword = async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+  
+    try {
+
+      const user = await UserModel.findById(req.user.id);
+      if(!currentPassword ||!newPassword)
+      {
+        return res.status(400).json({
+          success: false,
+        message: 'Both New Password And Old Password Are Required!',
+        });
+      }
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found',
+        });
+      }
+  
+      // Validate current password
+      const isMatch = user.passWord==currentPassword;
+      if (!isMatch) {
+        return res.status(400).json({
+          success: false,
+          message: 'Current password is incorrect',
+        });
+      }
+  
+      // Update to new password
+      user.passWord = newPassword; //we might use bcrypt but keeping it simple as of now
+      await user.save();
+  
+      res.status(200).json({
+        success: true,
+        message: 'Password changed successfully',
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: 'Error changing password',
+        error: error.message,
+      });
+    }
+  };
+ 
