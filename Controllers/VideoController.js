@@ -1,6 +1,7 @@
 const { default: mongoose } = require('mongoose');
 const UserModel = require('../Models/UserModel')
 const VideoModel=require('../Models/VideoModel')
+const PlaylistModel=require('../Models/PlaylistModel')
 const getSortCriteria = (type) => {
   switch (type) {
     case 'high': return -1; // Descending
@@ -84,64 +85,87 @@ exports.getVideo = async (req, res) => {
 };
 
   
-exports.getLikedVideos=async (req, res) => {
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let videos = []
-    try {
-        let _hasLiked = false
-        videos = await dB.collection("videos").find().toArray()
-        let likedVideos = videos.filter((video) => {
-            let hasLiked = false
-            _hasLiked = hasLiked
-            let likedBy = video.likedBy
 
-            for (let viewer of likedBy) {
-                if (viewer.ID == req.params.UID) {
-                    hasLiked = true
-                    _hasLiked = hasLiked
-                }
-            }
-            return _hasLiked
-        })
+exports.getLikedVideos = async (req, res) => {
+  try {
+    const userId = req.user.id;
 
-        res.json({ success: true, likedVideos, totalLikedVideos: likedVideos.length })
-    }
-    catch (error) {
-        res.json({ success: false })
+    // Validate if userId exists
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required to fetch liked videos.",
+      });
     }
 
-}
-exports.getSavedVideos=async (req, res) => {
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let videos = []
-    try {
-        let _hasSaved = false
-        videos = await dB.collection("videos").find().toArray()
-        let savedVideos = videos.filter((video) => {
-            let hasSaved = false
-            _hasSaved = hasSaved
-            let savedBy = video.savedBy
+    // Find videos liked by the user
+    const likedVideos = await VideoModel.find({ likedBy: userId });
 
-            for (let viewer of savedBy) {
-                if (viewer.ID == req.params.UID) {
-                    hasSaved = true
-                    _hasSaved = hasSaved
-                }
-            }
-            return _hasSaved
-        })
+   
 
+    // Return the liked videos
+    res.status(200).json({
+      success: true,
+      message: "Liked videos fetched successfully.",
+      likedVideos,
+    });
+  } catch (error) {
+    console.error("Error in getLikedVideos:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while fetching liked videos. Please try again later.",
+    });
+  }
+};
 
-        res.json({ success: true, savedVideos })
+exports.getSavedVideos = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Validate if userId exists
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required to fetch saved videos.",
+      });
     }
-    catch (error) {
-        res.json({ success: false })
+
+    // Find all playlists created by the user
+    const userPlaylists = await PlaylistModel.find({ createdBy: userId });
+
+    if (userPlaylists.length === 0) {
+      return res.status(404).json({
+        success: true,
+        message: "You have no saved videos as no playlists were found.",
+        savedVideos: [],
+      });
     }
 
+    // Collect unique video IDs from the user's playlists
+    const videoIds = new Set();
+    userPlaylists.forEach((playlist) => {
+      playlist.videos.forEach((video) => videoIds.add(video._id.toString()));
+    });
 
-}
+    // Fetch video details from the VideoModel
+    const savedVideos = await VideoModel.find({ _id: { $in: Array.from(videoIds) } });
+
+   
+
+    // Return the saved videos
+    res.status(200).json({
+      success: true,
+      message: "Saved videos fetched successfully.",
+      savedVideos,
+    });
+  } catch (error) {
+    console.error("Error in getSavedVideos:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while fetching saved videos. Please try again later.",
+    });
+  }
+};
 exports.getWatchedVideos=async (req, res) => {
     let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
     let dB = mongoClient.db("YouTube")
@@ -601,49 +625,4 @@ exports.getVideoDetail=async(req,res)=>{
         res.json({success:false})
 
     }
-}
-
-exports.saveVideo=async (req, res) => {
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let alreadySaved = false
-    let _UID = new ObjectId(req.params.UID)
-    try {
-        let _ID = new ObjectId(req.params.ID)
-        let video = await dB.collection("videos").findOne({ _id: _ID })
-        let savedBy = video.savedBy
-        console.log(savedBy)
-        console.log(video)
-        if (savedBy.length == 0) {
-            let user = await dB.collection("users").findOne({ _id: _UID })
-            let _savedBy = savedBy.concat({ name: user.name, ID: user._id, EMailAddress: user.EMailAddress })
-            dB.collection("videos").updateOne({ _id: _ID }, { $set: { savedBy: _savedBy } })
-        }
-
-        else {
-            for (let viewer of savedBy) {
-                if (viewer.ID == req.params.UID) {
-                    alreadySaved = true
-                }
-            }
-            if (alreadySaved == false) {
-                let user = await dB.collection("users").findOne({ _id: _UID })
-                let _savedBy = savedBy.concat({ name: user.name, ID: user._id, EMailAddress: user.EMailAddress })
-                dB.collection("videos").updateOne({ _id: _ID }, { $set: { savedBy: _savedBy } })
-            }
-            else {
-                let user = await dB.collection("users").findOne({ _id: _UID })
-                let _savedBy = savedBy.filter((viewer) => {
-                    return (viewer.ID != req.params.UID)
-                })
-                dB.collection("videos").updateOne({ _id: _ID }, { $set: { savedBy: _savedBy } })
-            }
-        }
-
-        res.json({ success: true })
-    }
-    catch (error) {
-        res.json({ success: false, message: error.message })
-    }
-
 }

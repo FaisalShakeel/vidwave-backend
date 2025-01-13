@@ -42,6 +42,7 @@ exports.createPlaylist = async (req, res) => {
 
 // Get playlists created by the logged-in user
 exports.getMyPlaylists = async (req, res) => {
+  
   try {
     // Fetch playlists created by the user
     const playlists = await PlaylistModel.find({ createdBy: req.user.id });
@@ -63,62 +64,64 @@ exports.getMyPlaylists = async (req, res) => {
   }
 };
 exports.addToPlaylist = async (req, res) => {
-    try {
-      const { playlistId, videoId } = req.body;
-  
-      // Validate the request
-      if (!playlistId || !videoId) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Playlist ID and Video ID are required." 
-        });
-      }
-  
-      // Find the playlist by ID
-      const playlist = await PlaylistModel.findById(playlistId);
-  
-      if (!playlist) {
-        return res.status(404).json({ 
-          success: false, 
-          message: "Playlist not found." 
-        });
-      }
-  
-      // Check if the logged-in user owns the playlist
-      if (playlist.createdBy.toString() !== req.user.id) {
-        return res.status(403).json({ 
-          success: false, 
-          message: "You are not authorized to modify this playlist." 
-        });
-      }
-  
-      // Check if the video already exists in the playlist
-      const videoIndex = playlist.videos.indexOf(videoId);
-  
-      if (videoIndex > -1) {
-        // Video is already in the playlist, so remove it
-        playlist.videos.splice(videoIndex, 1);
-        await playlist.save();
-        return res.status(200).json({ 
-          success: true, 
-          message: "Video removed from the playlist.", 
-          playlist 
-        });
-      } else {
-        // Video is not in the playlist, so add it
-        playlist.videos.push(videoId);
-        await playlist.save();
-        return res.status(200).json({ 
-          success: true, 
-          message: "Video added to the playlist.", 
-          playlist 
-        });
-      }
-    } catch (e) {
-      console.error("Error in addToPlaylist:", e.message);
-      res.status(500).json({ 
-        success: false, 
-        message: "Failed to modify the playlist. Please try again." 
+  try {
+    const { playlistId, video } = req.body;
+
+    // Validate the request
+    if (!playlistId || !video || !video._id) {
+      return res.status(400).json({
+        success: false,
+        message: "Playlist ID and video object with a valid '_id' are required.",
       });
     }
-  };
+
+    // Find the playlist by ID
+    const playlist = await PlaylistModel.findById(playlistId);
+
+    if (!playlist) {
+      return res.status(404).json({
+        success: false,
+        message: "Playlist not found.",
+      });
+    }
+
+    // Check if the logged-in user owns the playlist
+    if (playlist.createdBy.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to modify this playlist.",
+      });
+    }
+
+    // Check if the video object already exists in the playlist
+    const videoIndex = playlist.videos.findIndex(
+      (v) => v._id.toString() === video._id.toString()
+    );
+
+    if (videoIndex > -1) {
+      // Video object is already in the playlist, so remove it
+      playlist.videos.splice(videoIndex, 1);
+      await playlist.save();
+      return res.status(200).json({
+        success: true,
+        message: "Video removed from the playlist.",
+        playlist,
+      });
+    } else {
+      // Video object is not in the playlist, so add it
+      playlist.videos.push(video);
+      await playlist.save();
+      return res.status(200).json({
+        success: true,
+        message: "Video added to the playlist.",
+        playlist,
+      });
+    }
+  } catch (e) {
+    console.error("Error in addToPlaylist:", e.message);
+    res.status(500).json({
+      success: false,
+      message: "Failed to modify the playlist. Please try again.",
+    });
+  }
+};
