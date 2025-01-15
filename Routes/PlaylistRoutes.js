@@ -1,8 +1,12 @@
 const express=require('express')
 const verifyUser = require('../Middlewares/VerifyUser')
-const { createPlaylist, getMyPlaylists, addToPlaylist } = require('../Controllers/PlaylistController')
+const { createPlaylist, getMyPlaylists, addToPlaylist, getPlaylist, deletePlaylist, updatePlaylist } = require('../Controllers/PlaylistController')
+const { verify } = require('jsonwebtoken')
 let playlistRouter=express.Router()
 playlistRouter.post("/create",verifyUser,createPlaylist)
 playlistRouter.get("/getmyplaylists",verifyUser,getMyPlaylists)
 playlistRouter.post("/addtoplaylist",verifyUser,addToPlaylist)
+playlistRouter.get("/get-playlist/:playlistId",verifyUser,getPlaylist)
+playlistRouter.delete("/delete-playlist/:playlistId",verifyUser,deletePlaylist)
+playlistRouter.put("/update-playlist/:playlistId",verifyUser,updatePlaylist)
 module.exports=playlistRouter

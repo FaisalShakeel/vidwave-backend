@@ -125,3 +125,87 @@ exports.addToPlaylist = async (req, res) => {
     });
   }
 };
+exports.getPlaylist = async (req, res) => {
+  try {
+    const playlistId = req.params.playlistId;
+
+    const playlist = await PlaylistModel.findById(playlistId);
+
+    if (!playlist) {
+      return res.status(404).json({
+        success: false,
+        message: "Playlist not found.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Playlist retrieved successfully.",
+      playlist,
+    });
+  } catch (error) {
+    console.error("Error fetching playlist:", error);
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while fetching the playlist.",
+    });
+  }
+};
+exports.updatePlaylist = async (req, res) => {
+  try {
+    const playlistId = req.params.playlistId;
+    const { title, description } = req.body;
+    console.log("Updating Playlist")
+
+    const updatedPlaylist = await PlaylistModel.findByIdAndUpdate(
+      playlistId,
+      { title, description },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedPlaylist) {
+      return res.status(404).json({
+        success: false,
+        message: "Playlist not found.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Playlist updated successfully.",
+      playlist: updatedPlaylist,
+    });
+  } catch (error) {
+    console.error("Error updating playlist:", error);
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while updating the playlist.",
+    });
+  }
+};
+exports.deletePlaylist = async (req, res) => {
+  try {
+    const playlistId = req.params.playlistId;
+
+    const deletedPlaylist = await PlaylistModel.findByIdAndDelete(playlistId);
+
+    if (!deletedPlaylist) {
+      return res.status(404).json({
+        success: false,
+        message: "Playlist not found.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Playlist deleted successfully.",
+    });
+  } catch (error) {
+    console.error("Error deleting playlist:", error);
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while deleting the playlist.",
+    });
+  }
+};
+
