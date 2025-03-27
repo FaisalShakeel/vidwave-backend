@@ -1,6 +1,9 @@
 const { default: mongoose } = require('mongoose');
 const UserModel = require('../Models/UserModel')
 const VideoModel=require('../Models/VideoModel')
+const{IO,getReceiverSocketId, getIO}=require('../io')
+const jwt=require('jsonwebtoken')
+const NotificationModel=require('../Models/NotificationModel')
 const PlaylistModel=require('../Models/PlaylistModel')
 const getSortCriteria = (type) => {
   switch (type) {
@@ -24,7 +27,7 @@ exports.getAllVideos=async (req, res) => {
    
 
 }
-const jwt = require("jsonwebtoken");
+
 
 exports.getVideo = async (req, res) => {
   console.log("Getting Single Video", req.query.token);
@@ -166,32 +169,59 @@ exports.getSavedVideos = async (req, res) => {
     });
   }
 };
-exports.getWatchedVideos=async (req, res) => {
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let videos = []
-    try {
-        videos = await dB.collection("videos").find().toArray()
-        let _hasWatched = false
-        let watchedVideos = videos.filter((video) => {
-            let hasWatched = false
-            _hasWatched = hasWatched
-            let viewedBy = video.viewedBy
-            for (let viewer of viewedBy) {
-                if (viewer.ID == req.params.UID) {
-                    hasWatched = true
-                    _hasWatched = hasWatched
-                }
-            }
-            return _hasWatched
-        })
 
-        res.json({ success: true, watchedVideos })
+exports.getWatchedVideos = async (req, res) => {
+  try {
+    const userId = req.user.id; // Extract the user ID from the request object
+
+    // Find all videos where the user has viewed them
+    const watchedVideos = await VideoModel.find({
+      "viewedBy.id": userId,
+    })
+    return res.status(200).json({
+      success: true,
+      message: "Watched videos retrieved successfully.",
+      watchedVideos
+    });
+  } catch (e) {
+    console.error("Error retrieving watched videos:", e);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while retrieving watched videos.",
+    });
+  }
+};
+
+exports.deleteWatchHistory = async (req, res) => {
+  try {
+    const userId = req.user.id; // Extract the user ID from the request object
+
+    // Update all videos to remove the user from the 'viewedBy' array
+    const result = await VideoModel.updateMany(
+      { "viewedBy.id": userId }, // Filter: Videos where the user exists in 'viewedBy'
+      { $pull: { viewedBy: { id: userId } } } // Remove the user object from 'viewedBy'
+    );
+
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No watch history found for the user.",
+      });
     }
-    catch (error) {
-        res.json({ success: false })
-    }
-}
+
+    return res.status(200).json({
+      success: true,
+      message: "Watch history deleted successfully.",
+    });
+  } catch (e) {
+    console.error("Error deleting watch history:", e);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while deleting watch history.",
+    });
+  }
+};
+
 exports.addVideo=async (req, res) => {
    console.log("Req Body",req.user)
    if(req.user)
@@ -242,7 +272,12 @@ exports.likeVideo = async (req, res) => {
     } else {
       // If not liked, add the user to the likedBy list
       video.likedBy.push(userId);
-      await video.save();
+      const socketID=getReceiverSocketId(video.uploadedBy)
+      const notification=new NotificationModel({sentByName:req.user.name,sentByPhotoUrl:req.user.profilePhotoUrl,title:`${req.user.name} Has Liked Your Video:`+video.title,type:"Liked Video", sentBy:req.user.id,sentTo:video.uploadedBy,videoId:video._id})
+            getIO().to(socketID).emit("new-notification",notification)
+    
+            await video.save();
+            await notification.save()
       return res.status(200).json({success:true, message: "You have liked the video", likedBy: video.likedBy });
     }
   } catch (error) {
@@ -291,8 +326,14 @@ exports.addComment = async (req, res) => {
 
         // Add the comment to the video's comments array
         video.comments.push(newComment);
+        const notification= new NotificationModel({sentByName:name,sentByPhotoUrl:profilePhotoUrl,type:"Added Comment",title:`${name} Commented Your Video:`+video.title,sentBy:userId,sentTo:video.uploadedBy,videoId:video._id})
+       const socketId=getReceiverSocketId(video.uploadedBy)
+       console.log("Socket ID",socketId)
+      
+        getIO().to(socketId).emit("new-notification",notification)
 
         // Save the updated video
+       await notification.save()
         await video.save();
 
         // Respond with success

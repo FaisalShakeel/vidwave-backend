@@ -1,6 +1,7 @@
 const UserModel=require('../Models/UserModel')
 const PlaylistModel=require('../Models/PlaylistModel')
 const VideoModel=require('../Models/VideoModel')
+const{IO,getReceiverSocketId, getIO}=require('../io')
 const jwt=require('jsonwebtoken')
 const JWT_EXPIRES_IN='30d'
 
@@ -87,6 +88,7 @@ exports.login=async (req, res)=>{
 }
 }
 const mongoose = require("mongoose"); // Assuming Mongoose is being used
+const NotificationModel = require('../Models/NotificationModel')
 
 exports.getProfile = async (req, res) => {
   try {
@@ -172,18 +174,27 @@ exports.follow = async (req, res) => {
             // Remove the following relationship
             user.followings = user.followings.filter(id => id.toString() !== followingId);
             userToFollow.followers = userToFollow.followers.filter(id => id.toString() !== userId);
-
+            const socketID=getReceiverSocketId(userToFollow._id.toString())
+            console.log("Socket ID",socketID)
+          const notification=  new NotificationModel({sentByName:user.name,sentByPhotoUrl:user.profilePhotoUrl,title:`${user.name} Has Unfollowed You!`,type:"Unfollowed", sentBy:user._id,sentTo:userToFollow._id})
+            getIO().to(socketID).emit("new-notification",notification)
+            await notification.save()
             await user.save();
             await userToFollow.save();
 
             return res.status(200).json({ success: true, message: "Unfollowed the user successfully" });
         } else {
             // Add the following relationship
+            const socketID=getReceiverSocketId(userToFollow._id.toString())
+            console.log("Socket ID",socketID)
+           const notification= new NotificationModel({sentByName:user.name,sentByPhotoUrl:user.profilePhotoUrl,type:"Followed",title:`${user.name} Started Following You!`,sentBy:user._id,sentTo:userToFollow._id})
+            getIO().to(socketID).emit("new-notification",notification)
             user.followings.push(followingId);
             userToFollow.followers.push(userId);
-
+            
+            await notification.save()    
             await user.save();
-            await userToFollow.save();
+            await userToFollow.save();           
 
             return res.status(200).json({ success: true, message: "Followed the user successfully" });
         }
