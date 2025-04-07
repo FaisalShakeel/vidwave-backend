@@ -29,7 +29,7 @@ exports.getAllVideos=async (req, res) => {
 }
 
 
-exports.getVideo = async (req, res) => {
+exports.getVideoDetails = async (req, res) => {
   console.log("Getting Single Video", req.query.token);
 
 
@@ -137,7 +137,7 @@ exports.getSavedVideos = async (req, res) => {
     const userPlaylists = await PlaylistModel.find({ createdBy: userId });
 
     if (userPlaylists.length === 0) {
-      return res.status(404).json({
+      return res.status(200).json({
         success: true,
         message: "You have no saved videos as no playlists were found.",
         savedVideos: [],
@@ -651,19 +651,3 @@ exports.updateVideo = async (req, res) => {
   }
 };
 
-exports.getVideoDetail=async(req,res)=>{
-    let mongoClient = await MongoClient.connect("mongodb://127.0.0.1:27017")
-    let dB = mongoClient.db("YouTube")
-    let _ID  = new ObjectId(req.params.ID)
-    try
-    {
-     let video= await dB.collection("videos").findOne({_id:_ID})
-     console.log("Video Fetched!")
-     res.json({success:true,video})
-    }
-    catch(e)
-    {
-        res.json({success:false})
-
-    }
-}
